@@ -1,0 +1,6 @@
+---
+
+- name: cloudflared daemon-reload
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: not cloudflared_debug | bool

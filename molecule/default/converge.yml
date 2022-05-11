@@ -1,0 +1,7 @@
+---
+- name: Converge
+  hosts: all
+  vars:
+    cloudflared_debug: true
+  roles:
+    - role: escapace.cloudflared

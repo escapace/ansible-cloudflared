@@ -1,0 +1,21 @@
+[Unit]
+Description=Cloudflare Tunnel client
+Documentation=https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide
+After=ferm.service
+After=network-online.target
+Wants=ferm.service
+Wants=network-online.target
+ConditionFileNotEmpty=/opt/cloudflared/config/default
+
+[Service]
+User=cloudflared
+Group=cloudflared
+TimeoutStartSec=0
+Type=notify
+EnvironmentFile=/opt/cloudflared/config/default
+ExecStart=/opt/cloudflared/bin/cloudflared --no-autoupdate tunnel run
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
