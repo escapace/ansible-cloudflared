@@ -198,7 +198,7 @@ function run() {
   local -r config=$(
     cat << EOF
 TUNNEL_REGION="${region}"
-TUNNEL_METRICS="127.0.0.1:9301"
+TUNNEL_METRICS="[::1]:9301"
 TUNNEL_TOKEN="${tunnel_token}"
 
 EOF
