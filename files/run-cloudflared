@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+
+set -e
+set -u
+set -o pipefail
+
+SCRIPT_NAME=
+SCRIPT_NAME="$(basename "$0")"
+
+function wrap() {
+  local strings="${1}"
+
+  local length
+  local cols
+  local width
+
+  length="$(echo -n "${strings}" | awk -F '|' '{print $1}' | awk '{ print length }' | sort -n | tail -1)"
+  cols="$(tput cols)"
+
+  if [[ $(((cols - 4) / length)) -ge 2 ]]; then
+    if [[ $((cols - length - 4)) -ge 80 ]]; then
+      width=80
+    else
+      width=$((cols - length - 4))
+    fi
+
+    echo -e "${strings}" \
+      | fold -s -w "${width}" \
+      | sed -e "/--/! s|^| \||g" \
+      | column -t -s '|' \
+      | sed 's/^/  /'
+  else
+    local lines
+    local line
+    readarray -t lines <<< "${strings}"
+    local option
+    local description
+
+    if [[ "${cols}" -ge 80 ]]; then
+      width="78"
+    else
+      width=$((cols - 2))
+    fi
+
+    for line in "${lines[@]}"; do
+      option="${line%%|*}"
+      description=${line#*|}
+
+      echo "${option}"
+      echo
+      echo "${description}" | fold -s -w "${width}" | sed 's/^/  /'
+      echo
+    done
+  fi
+}
+
+function print_usage() {
+  echo
+  echo "Usage: ${SCRIPT_NAME} [OPTIONS]"
+  echo
+  echo "This script is used to configure and run cloudflared on an AWS server."
+  echo
+  echo "Options:"
+  echo
+  wrap "$(
+    echo -e "--region|Cloudflare region."
+    echo -e "--secrets-bucket-name|AWS S3 secrets bucket name."
+  )"
+  echo
+}
+
+function log() {
+  local -r level="$1"
+  local -r message="$2"
+  local -r timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  echo >&2 -e "${timestamp} [${level}] [$SCRIPT_NAME] ${message}"
+}
+
+function log_info() {
+  local -r message="$1"
+  log "INFO" "$message"
+}
+
+function log_warn() {
+  local -r message="$1"
+  log "WARN" "$message"
+}
+
+function log_error() {
+  local -r message="$1"
+  log "ERROR" "$message"
+}
+
+function assert_not_empty() {
+  local -r arg_name="$1"
+  local -r arg_value="$2"
+
+  if [[ -z "$arg_value" ]]; then
+    log_error "The value for '$arg_name' cannot be empty"
+    print_usage
+    exit 1
+  fi
+}
+
+function get_object() {
+  local -r secrets_bucket_name="$1"
+  local -r source="$2"
+  local -r target="$3"
+  local -r user="$4"
+
+  local -r key="${EC2_INSTANCE_REGION}/${source}"
+
+  log_info "Downloading ${key}"
+
+  aws s3api get-object \
+    --bucket "${secrets_bucket_name}" \
+    --key "${key}" \
+    "${target}" > /dev/null || exit 1
+
+  chown "${user}:${user}" "${target}"
+}
+
+function get_object_value() {
+  local -r secrets_bucket_name="$1"
+  local -r source="$2"
+  local -r key="${EC2_INSTANCE_REGION}/${source}"
+
+  log_info "Downloading ${key}"
+
+  aws s3 cp --quiet \
+    "s3://${secrets_bucket_name}/${key}" /dev/stdout || exit 1
+}
+
+function run() {
+  umask 022
+
+  if [[ ! -f "/etc/sysconfig/ec2-environment" ]]; then
+    print_usage
+
+    log_error "/etc/sysconfig/ec2-environment: No such file"
+
+    exit 1
+  fi
+
+  set -o allexport
+  source "/etc/sysconfig/ec2-environment"
+  set +o allexport
+
+  local secrets_bucket_name=""
+  local region="us"
+
+  while [[ $# -gt 0 ]]; do
+    local key="$1"
+
+    case "$key" in
+      --secrets-bucket-name)
+        assert_not_empty "$key" "$2"
+        secrets_bucket_name="$2"
+        shift
+        ;;
+      --region)
+        assert_not_empty "$key" "$2"
+        region="$2"
+        shift
+        ;;
+      --help)
+        print_usage
+        exit
+        ;;
+      *)
+        log_error "Unrecognized argument: $key"
+        print_usage
+        exit 1
+        ;;
+    esac
+
+    shift
+  done
+
+  assert_not_empty "--secrets-bucket-name" "$secrets_bucket_name"
+
+  local -r config_file="/opt/cloudflared/config/default"
+
+  local tunnel_token
+
+  tunnel_token="$(get_object_value "${secrets_bucket_name}" "bastion/cloudflared/cloudflared-tunnel-token")"
+
+  get_object "${secrets_bucket_name}" \
+    "bastion/nomad/nomad-ca.pem" \
+    "/etc/pki/ca-trust/source/anchors/nomad-ca.pem" "root" || log_warn "Unable to download \"nomad/nomad-ca.pem\""
+
+  if [[ -f "/etc/pki/ca-trust/source/anchors/nomad-ca.pem" ]]; then
+    chmod 644 "/etc/pki/ca-trust/source/anchors/nomad-ca.pem"
+
+    update-ca-trust
+  fi
+
+  local -r config=$(
+    cat << EOF
+TUNNEL_REGION="${region}"
+TUNNEL_METRICS="127.0.0.1:9301"
+TUNNEL_TOKEN="${tunnel_token}"
+
+EOF
+  )
+
+  echo -e "$config" > "${config_file}"
+  chown cloudflared:cloudflared "${config_file}"
+  chmod 640 "${config_file}"
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable cloudflared.service
+  sudo systemctl restart cloudflared.service
+}
+
+run "$@"

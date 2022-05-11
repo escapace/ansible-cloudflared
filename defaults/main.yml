@@ -1,0 +1,9 @@
+---
+
+cloudflared_version: "2022.5.0"
+
+cloudflared_checksums:
+  amd64: "f4694eaa8e1953e5a701a8b26e3b71c19fe2732617cf4b7c1c816d984a3402f2"
+  arm64: "74424495a9ef2ef61f69ecb0a290b7292692bc6eb0cf92debf11e53c235bcbe3"
+
+cloudflared_debug: false
