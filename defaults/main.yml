@@ -1,9 +1,9 @@
 ---
 
-cloudflared_version: "2022.5.1"
+cloudflared_version: "2022.5.3"
 
-cloudflared_checksums:
-  amd64: "b63c491f87ce6a2beed1ae224e82756b681808f5c1014f970c41ef330d177e3e"
-  arm64: "5af763067a9271fef0368e01d41cc5a367f819e85743c71a6468136ae3db359d"
+# cloudflared_checksums:
+#   amd64: ""
+#   arm64: ""
 
 cloudflared_debug: false

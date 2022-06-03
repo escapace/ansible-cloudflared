@@ -39,7 +39,7 @@
       ansible.builtin.get_url:
         url: "{{ cloudflared_url }}"
         dest: "/opt/cloudflared/bin/cloudflared"
-        checksum: "sha256:{{ cloudflared_checksum }}"
+        # checksum: "sha256:{{ cloudflared_checksum }}"
         mode: 0750
         owner: cloudflared
         group: cloudflared
