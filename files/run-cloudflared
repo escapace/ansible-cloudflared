@@ -243,7 +243,7 @@ EOF
 
   sudo systemctl daemon-reload
   sudo systemctl enable cloudflared.service
-  sudo systemctl restart cloudflared.service
+  sudo systemctl --no-block restart cloudflared.service
 }
 
 run "$@"
