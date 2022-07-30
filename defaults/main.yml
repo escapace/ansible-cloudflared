@@ -1,6 +1,6 @@
 ---
 
-cloudflared_version: "2022.5.3"
+cloudflared_version: "2022.7.1"
 
 # cloudflared_checksums:
 #   amd64: ""
