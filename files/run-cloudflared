@@ -24,15 +24,15 @@ function wrap() {
       width=$((cols - length - 4))
     fi
 
-    echo -e "${strings}" \
-      | fold -s -w "${width}" \
-      | sed -e "/--/! s|^| \||g" \
-      | column -t -s '|' \
-      | sed 's/^/  /'
+    echo -e "${strings}" |
+      fold -s -w "${width}" |
+      sed -e "/--/! s|^| \||g" |
+      column -t -s '|' |
+      sed 's/^/  /'
   else
     local lines
     local line
-    readarray -t lines <<< "${strings}"
+    readarray -t lines <<<"${strings}"
     local option
     local description
 
@@ -116,7 +116,7 @@ function get_object() {
   aws s3api get-object \
     --bucket "${secrets_bucket_name}" \
     --key "${key}" \
-    "${target}" > /dev/null || exit 1
+    "${target}" >/dev/null || exit 1
 
   chown "${user}:${user}" "${target}"
 }
@@ -155,30 +155,30 @@ function run() {
     local key="$1"
 
     case "$key" in
-      --role)
-        assert_not_empty "$key" "$2"
-        role="$2"
-        shift
-        ;;
-      --secrets-bucket-name)
-        assert_not_empty "$key" "$2"
-        secrets_bucket_name="$2"
-        shift
-        ;;
-      --region)
-        assert_not_empty "$key" "$2"
-        region="$2"
-        shift
-        ;;
-      --help)
-        print_usage
-        exit
-        ;;
-      *)
-        log_error "Unrecognized argument: $key"
-        print_usage
-        exit 1
-        ;;
+    --role)
+      assert_not_empty "$key" "$2"
+      role="$2"
+      shift
+      ;;
+    --secrets-bucket-name)
+      assert_not_empty "$key" "$2"
+      secrets_bucket_name="$2"
+      shift
+      ;;
+    --region)
+      assert_not_empty "$key" "$2"
+      region="$2"
+      shift
+      ;;
+    --help)
+      print_usage
+      exit
+      ;;
+    *)
+      log_error "Unrecognized argument: $key"
+      print_usage
+      exit 1
+      ;;
     esac
 
     shift
@@ -229,7 +229,7 @@ function run() {
   fi
 
   local -r config=$(
-    cat << EOF
+    cat <<EOF
 TUNNEL_REGION="${region}"
 TUNNEL_METRICS="[::1]:9301"
 TUNNEL_TOKEN="${tunnel_token}"
@@ -237,7 +237,7 @@ TUNNEL_TOKEN="${tunnel_token}"
 EOF
   )
 
-  echo -e "$config" > "${config_file}"
+  echo -e "$config" >"${config_file}"
   chown cloudflared:cloudflared "${config_file}"
   chmod 640 "${config_file}"
 
