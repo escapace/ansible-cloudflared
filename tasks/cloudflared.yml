@@ -67,7 +67,6 @@
   when: provider is defined and provider == "ec2"
   tags:
     - run-cloudflared
-
 # - name: create directory for systemd drop-ins
 #   ansible.builtin.file:
 #     path: /etc/systemd/system/cloudflared.service.d
