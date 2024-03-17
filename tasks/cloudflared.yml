@@ -1,5 +1,4 @@
 ---
-
 - name: cloudflared group
   ansible.builtin.group:
     name: cloudflared
@@ -19,11 +18,11 @@
     group: cloudflared
     path: "{{ item }}"
     state: directory
-    mode: 0750
+    mode: "0750"
   with_items:
-    - "/opt/cloudflared"
-    - "/opt/cloudflared/bin"
-    - "/opt/cloudflared/config"
+    - /opt/cloudflared
+    - /opt/cloudflared/bin
+    - /opt/cloudflared/config
 
 - name: check cloudflared version
   ansible.builtin.slurp:
@@ -38,9 +37,9 @@
     - name: download cloudflared
       ansible.builtin.get_url:
         url: "{{ cloudflared_url }}"
-        dest: "/opt/cloudflared/bin/cloudflared"
+        dest: /opt/cloudflared/bin/cloudflared
         # checksum: "sha256:{{ cloudflared_checksum }}"
-        mode: 0750
+        mode: "0750"
         owner: cloudflared
         group: cloudflared
         setype: bin_t
@@ -52,7 +51,7 @@
         dest: /opt/cloudflared/version
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
 
 - name: create cloudflared service
   ansible.builtin.template:
@@ -60,7 +59,7 @@
     dest: /usr/lib/systemd/system/cloudflared.service
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
   notify:
     - cloudflared daemon-reload
 

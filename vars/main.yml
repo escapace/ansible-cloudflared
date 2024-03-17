@@ -9,6 +9,6 @@ cloudflared_architecture_map:
 
 cloudflared_architecture: "{{ cloudflared_architecture_map[ansible_architecture] }}"
 
-cloudflared_binary: "cloudflared-linux-{{ cloudflared_architecture }}"
-cloudflared_url: "https://github.com/cloudflare/cloudflared/releases/download/{{ cloudflared_version }}/{{ cloudflared_binary }}"
+cloudflared_binary: cloudflared-linux-{{ cloudflared_architecture }}
+cloudflared_url: https://github.com/cloudflare/cloudflared/releases/download/{{ cloudflared_version }}/{{ cloudflared_binary }}
 cloudflared_checksum: "{{ cloudflared_checksums[cloudflared_architecture] }}"
