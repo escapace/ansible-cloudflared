@@ -1,5 +1,5 @@
 ---
-- ansible.builtin.include_tasks: cloudflared.yml
+- ansible.builtin.include_tasks: cloudflared.yaml
   when: ansible_os_family == "RedHat"
   tags:
     - run-cloudflared

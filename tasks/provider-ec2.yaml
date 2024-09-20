@@ -7,7 +7,7 @@
   ansible.builtin.copy:
     src: files/run-cloudflared
     dest: /opt/cloudflared/bin/run-cloudflared
-    mode: "0750"
+    mode: '0750'
     owner: cloudflared
     group: cloudflared
   tags:

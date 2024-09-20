@@ -4,4 +4,4 @@
   vars:
     cloudflared_debug: true
   roles:
-    - role: escapace.cloudflared
+    - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
