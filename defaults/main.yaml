@@ -1,5 +1,5 @@
 ---
-cloudflared_version: 2023.8.2
+cloudflared_version: 2024.12.2
 
 # cloudflared_checksums:
 #   amd64: ""
