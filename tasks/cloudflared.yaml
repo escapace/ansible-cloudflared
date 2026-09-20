@@ -48,22 +48,16 @@
     - name: retrieve cloudflared release metadata
       ansible.builtin.uri:
         url: "{{ cloudflared_release_api_url }}"
-        headers: >-
-          {{
-            {
-              'Accept': 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28'
-            }
-            | combine(
-                {'Authorization': 'Bearer ' ~ cloudflared_github_token}
-                if cloudflared_github_token | length > 0
-                else {}
-              )
-          }}
+        headers:
+          Accept: application/vnd.github+json
+          X-GitHub-Api-Version: "2022-11-28"
         return_content: true
+        timeout: 30
       when: cloudflared_embedded_checksum | length == 0
-      no_log: "{{ cloudflared_github_token | length > 0 }}"
       register: cloudflared_release
+      retries: 3
+      delay: 5
+      until: cloudflared_release is succeeded
 
     - name: select cloudflared release metadata
       ansible.builtin.set_fact:

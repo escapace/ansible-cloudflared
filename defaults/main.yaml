@@ -4,9 +4,6 @@ cloudflared_version: 2026.9.1
 # Set this to a SHA-256 value to override embedded and release metadata.
 cloudflared_checksum: ""
 
-# Set this to authenticate GitHub API requests for non-embedded versions.
-cloudflared_github_token: ""
-
 cloudflared_checksums:
   "2026.9.1":
     amd64: 03f1f25d1cc93b9ad6c60569d44060bc4f17ed97075760ed8cfca4b12dcd68cc
