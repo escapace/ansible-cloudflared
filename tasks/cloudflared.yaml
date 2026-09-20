@@ -24,21 +24,116 @@
     - /opt/cloudflared/bin
     - /opt/cloudflared/config
 
-- name: check cloudflared version
+- name: check whether the cloudflared version file exists
+  ansible.builtin.stat:
+    path: /opt/cloudflared/version
+  register: cloudflared_version_file
+
+- name: read the cloudflared version file
   ansible.builtin.slurp:
     src: /opt/cloudflared/version
-  register: cloudflared_current_vesion
-  changed_when: false
-  ignore_errors: true
+  when: cloudflared_version_file.stat.exists
+  register: cloudflared_current_version
 
 - name: install cloudflared
-  when: cloudflared_current_vesion.failed or cloudflared_current_vesion['content'] | b64decode != cloudflared_version
+  when: >-
+    not cloudflared_version_file.stat.exists
+    or (cloudflared_current_version.content | default("") | b64decode) != cloudflared_version
   block:
+    - name: use the embedded cloudflared checksum
+      ansible.builtin.set_fact:
+        cloudflared_resolved_checksum: "{{ cloudflared_embedded_checksum }}"
+      when: cloudflared_embedded_checksum | length > 0
+
+    - name: retrieve cloudflared release metadata
+      ansible.builtin.uri:
+        url: "{{ cloudflared_release_api_url }}"
+        headers: >-
+          {{
+            {
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28'
+            }
+            | combine(
+                {'Authorization': 'Bearer ' ~ cloudflared_github_token}
+                if cloudflared_github_token | length > 0
+                else {}
+              )
+          }}
+        return_content: true
+      when: cloudflared_embedded_checksum | length == 0
+      no_log: "{{ cloudflared_github_token | length > 0 }}"
+      register: cloudflared_release
+
+    - name: select cloudflared release metadata
+      ansible.builtin.set_fact:
+        cloudflared_release_assets: >-
+          {{
+            cloudflared_release.json.assets
+            | selectattr('name', 'equalto', cloudflared_binary)
+            | list
+          }}
+        cloudflared_release_body_checksums: >-
+          {{
+            cloudflared_release.json.body
+            | default('', true)
+            | regex_findall(
+                '(?m)^'
+                ~ cloudflared_binary
+                ~ ':[ ]*([0-9a-fA-F]{64})[ ]*$'
+              )
+          }}
+      when: cloudflared_embedded_checksum | length == 0
+
+    - name: validate cloudflared release metadata
+      ansible.builtin.assert:
+        that:
+          - cloudflared_release_assets | length == 1
+          - >-
+            cloudflared_release_digest is match('^sha256:[0-9a-fA-F]{64}$')
+            or cloudflared_release_body_checksums | length == 1
+        fail_msg: >-
+          The cloudflared {{ cloudflared_version }} release does not provide one
+          SHA-256 checksum for {{ cloudflared_binary }}.
+        quiet: true
+      when: cloudflared_embedded_checksum | length == 0
+      vars:
+        cloudflared_release_digest: >-
+          {{
+            (cloudflared_release_assets | first | default({})).get('digest', '')
+            | default('', true)
+          }}
+
+    - name: resolve the cloudflared checksum
+      ansible.builtin.set_fact:
+        cloudflared_resolved_checksum: >-
+          {{
+            cloudflared_release_digest
+            | regex_replace('^sha256:', '')
+            if cloudflared_release_digest | length > 0
+            else cloudflared_release_body_checksums | first
+          }}
+      when: cloudflared_embedded_checksum | length == 0
+      vars:
+        cloudflared_release_digest: >-
+          {{
+            (cloudflared_release_assets | first | default({})).get('digest', '')
+            | default('', true)
+          }}
+
+    - name: validate the cloudflared checksum
+      ansible.builtin.assert:
+        that:
+          - cloudflared_resolved_checksum is match('^[0-9a-fA-F]{64}$')
+        fail_msg: >-
+          The resolved cloudflared {{ cloudflared_version }} checksum is invalid.
+        quiet: true
+
     - name: download cloudflared
       ansible.builtin.get_url:
         url: "{{ cloudflared_url }}"
         dest: /opt/cloudflared/bin/cloudflared
-        # checksum: "sha256:{{ cloudflared_checksum }}"
+        checksum: sha256:{{ cloudflared_resolved_checksum }}
         mode: "0750"
         owner: cloudflared
         group: cloudflared
@@ -55,15 +150,17 @@
 
 - name: create cloudflared service
   ansible.builtin.template:
-    src: templates/cloudflared.service.j2
+    src: cloudflared.service.j2
     dest: /usr/lib/systemd/system/cloudflared.service
     owner: root
     group: root
     mode: "0644"
   notify:
     - cloudflared daemon-reload
+    - cloudflared restart service
 
-- ansible.builtin.include_tasks: provider-ec2.yaml
+- name: include cloudflared ec2 provider tasks
+  ansible.builtin.include_tasks: provider-ec2.yaml
   when: provider is defined and provider == "ec2"
   tags:
     - run-cloudflared

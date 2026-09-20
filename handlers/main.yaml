@@ -1,5 +1,20 @@
 ---
-- name: cloudflared daemon-reload
-  ansible.builtin.systemd:
+- name: cloudflared gather service facts before runtime changes
+  ansible.builtin.service_facts:
+  listen: cloudflared restart service
+
+- name: cloudflared reload systemd manager
+  ansible.builtin.systemd_service:
     daemon_reload: true
-  when: not cloudflared_debug | bool
+  when: ansible_facts.get("service_mgr") == "systemd"
+  listen: cloudflared daemon-reload
+
+- name: cloudflared restart active service
+  ansible.builtin.systemd_service:
+    name: cloudflared.service
+    state: restarted
+  when: >-
+    (ansible_facts.services | default({}))
+    .get("cloudflared.service", {})
+    .get("state") == "running"
+  listen: cloudflared restart service

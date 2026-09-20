@@ -1,5 +1,5 @@
 ---
-# vars file for escapace.cni
+# vars file for escapace.cloudflared
 
 cloudflared_architecture_map:
   amd64: amd64
@@ -7,8 +7,14 @@ cloudflared_architecture_map:
   aarch64: arm64
   64-bit: amd64
 
-cloudflared_architecture: "{{ cloudflared_architecture_map[ansible_architecture] }}"
+cloudflared_architecture: "{{ cloudflared_architecture_map[ansible_facts['architecture']] }}"
 
 cloudflared_binary: cloudflared-linux-{{ cloudflared_architecture }}
 cloudflared_url: https://github.com/cloudflare/cloudflared/releases/download/{{ cloudflared_version }}/{{ cloudflared_binary }}
-cloudflared_checksum: "{{ cloudflared_checksums[cloudflared_architecture] }}"
+cloudflared_release_api_url: https://api.github.com/repos/cloudflare/cloudflared/releases/tags/{{ cloudflared_version }}
+cloudflared_embedded_checksum: >-
+  {{
+    cloudflared_checksum
+    if cloudflared_checksum | length > 0
+    else cloudflared_checksums.get(cloudflared_version, {}).get(cloudflared_architecture, '')
+  }}

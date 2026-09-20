@@ -1,3 +1,6 @@
 ---
 collections: []
-roles: []
+roles:
+  - name: escapace.aws_cli
+    src: https://github.com/escapace/ansible-aws_cli
+    version: origin/trunk
