@@ -6,15 +6,19 @@
 - name: cloudflared reload systemd manager
   ansible.builtin.systemd_service:
     daemon_reload: true
-  when: ansible_facts.get("service_mgr") == "systemd"
+  when:
+    - not ansible_check_mode
+    - ansible_facts.get("service_mgr") == "systemd"
   listen: cloudflared daemon-reload
 
 - name: cloudflared restart active service
   ansible.builtin.systemd_service:
     name: cloudflared.service
     state: restarted
-  when: >-
-    (ansible_facts.services | default({}))
-    .get("cloudflared.service", {})
-    .get("state") == "running"
+  when:
+    - not ansible_check_mode
+    - >-
+      (ansible_facts.services | default({}))
+      .get("cloudflared.service", {})
+      .get("state") == "running"
   listen: cloudflared restart service
