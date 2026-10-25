@@ -1,0 +1,95 @@
+---
+- name: verify cloudflared release selection
+  hosts: all
+  tasks:
+    - name: read the initially installed version
+      ansible.builtin.slurp:
+        src: /opt/cloudflared/version
+      register: cloudflared_test_initial_version
+
+    - name: load embedded checksums for testing
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yaml"
+        name: cloudflared_test_defaults
+
+    - name: test embedded, upstream, legacy and explicit checksum paths
+      ansible.builtin.include_tasks: tasks/verify-version.yaml
+      loop:
+        - version: "2026.9.1"
+          embedded: true
+          metadata: false
+        - version: "{{ cloudflared_test_initial_version.content | b64decode }}"
+          metadata: true
+        - version: "2024.12.2"
+          metadata: true
+          legacy: true
+        - version: "2026.9.1"
+          override: true
+          metadata: false
+        - version: "2026.9.1"
+          override: true
+          metadata: false
+          remove_binary: true
+      loop_control:
+        loop_var: cloudflared_test_case
+
+    - name: reject an invalid version before changing host state
+      block:
+        - name: apply an invalid cloudflared version
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+          vars:
+            cloudflared_version: not-a-release
+
+        - name: fail if the invalid version was accepted
+          ansible.builtin.fail:
+            msg: An invalid version was accepted.
+      rescue:
+        - name: confirm input validation rejected the version
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'validate cloudflared inputs'
+
+    - name: change binary ownership and permissions to test repair
+      ansible.builtin.file:
+        path: /opt/cloudflared/bin/cloudflared
+        owner: "65534"
+        group: "65534"
+        mode: "0700"
+
+    - name: repair attributes without resolving or downloading the installed pin
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+      vars:
+        cloudflared_version: "2026.9.1"
+        cloudflared_checksums: {}
+        cloudflared_checksum: ""
+
+    - name: inspect repaired binary attributes
+      ansible.builtin.stat:
+        path: /opt/cloudflared/bin/cloudflared
+      register: cloudflared_test_repaired_binary
+
+    - name: verify attribute repair uses no release lookup or download
+      ansible.builtin.assert:
+        that:
+          - cloudflared_test_repaired_binary.stat.uid == 0
+          - cloudflared_test_repaired_binary.stat.gid == 0
+          - cloudflared_test_repaired_binary.stat.mode == '0755'
+          - cloudflared_release == {}
+          - cloudflared_download == {}
+
+    - name: inspect the cloudflared installation contents
+      ansible.builtin.find:
+        paths: /opt/cloudflared
+        recurse: true
+        file_type: any
+        hidden: true
+      register: cloudflared_test_installation
+
+    - name: verify the role installs only the binary and version marker
+      ansible.builtin.assert:
+        that:
+          - >-
+            cloudflared_test_installation.files | map(attribute='path') | sort | list
+            == ['/opt/cloudflared/bin', '/opt/cloudflared/bin/cloudflared', '/opt/cloudflared/version']

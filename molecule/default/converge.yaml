@@ -1,10 +1,5 @@
 ---
 - name: converge
   hosts: all
-  pre_tasks:
-    - name: install systemd for cloudflared role testing
-      ansible.builtin.package:
-        name: systemd
-        state: present
   roles:
     - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"

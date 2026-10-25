@@ -1,0 +1,27 @@
+---
+- name: retrieve cloudflared release metadata
+  ansible.builtin.include_role:
+    name: escapace.utilities.github_request
+    allow_duplicates: true
+    public: false
+  vars:
+    github_request_url: "{{ cloudflared_release_api_url }}"
+    github_request_result_var: cloudflared_release
+
+- name: validate the cloudflared release response
+  ansible.builtin.assert:
+    that:
+      - cloudflared_release.get('json') is mapping
+    fail_msg: "Invalid cloudflared {{ cloudflared_version }} release metadata for {{ cloudflared_binary }}."
+    quiet: true
+
+- name: validate the cloudflared release version
+  ansible.builtin.assert:
+    that:
+      - cloudflared_release.json.get('tag_name') is string
+      - cloudflared_release.json.get('tag_name', '') is match('^[0-9]{4}\\.[0-9]{1,2}\\.[0-9]+$')
+      - cloudflared_version == 'latest' or cloudflared_release.json.get('tag_name') == cloudflared_version
+      - not cloudflared_release.json.get('draft', true)
+      - not cloudflared_release.json.get('prerelease', true)
+    fail_msg: "Invalid cloudflared {{ cloudflared_version }} release metadata for {{ cloudflared_binary }}."
+    quiet: true

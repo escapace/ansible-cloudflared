@@ -1,7 +1,5 @@
 ---
-dependencies:
-  - role: escapace.aws_cli
-    when: provider is defined and provider == "ec2"
+dependencies: []
 
 galaxy_info:
   role_name: cloudflared

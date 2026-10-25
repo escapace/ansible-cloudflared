@@ -1,28 +1,56 @@
 ---
-- name: cloudflared group
-  ansible.builtin.group:
-    name: cloudflared
-    state: present
-    system: true
+- name: validate cloudflared inputs
+  ansible.builtin.assert:
+    that:
+      - cloudflared_version is string
+      - cloudflared_version == 'latest' or cloudflared_version is match('^[0-9]{4}\\.[0-9]{1,2}\\.[0-9]+$')
+      - cloudflared_checksum is string
+      - cloudflared_checksum == '' or cloudflared_checksum is match('^[0-9a-fA-F]{64}$')
+      - cloudflared_checksums is mapping
+      - cloudflared_checksums.values() | select('mapping') | list | length == cloudflared_checksums | length
+      - ansible_facts['architecture'] in cloudflared_architecture_map
+    fail_msg: >-
+      Use latest or an exact YYYY.M.P cloudflared_version, a SHA-256 checksum,
+      and a version-to-architecture checksum mapping on amd64 or arm64.
+    quiet: true
 
-- name: cloudflared user
-  ansible.builtin.user:
-    name: cloudflared
-    group: cloudflared
-    system: true
-    create_home: false
+- name: resolve the latest cloudflared release
+  ansible.builtin.include_tasks: release.yaml
+  when: cloudflared_version == 'latest'
+
+- name: resolve the cloudflared version
+  ansible.builtin.set_fact:
+    cloudflared_resolved_version: >-
+      {{
+        cloudflared_release.json.tag_name
+        if cloudflared_version == 'latest'
+        else cloudflared_version
+      }}
+
+- name: validate the selected cloudflared checksum
+  ansible.builtin.assert:
+    that:
+      - cloudflared_embedded_checksum is string
+      - cloudflared_embedded_checksum == '' or cloudflared_embedded_checksum is match('^[0-9a-fA-F]{64}$')
+    fail_msg: >-
+      Invalid checksum for cloudflared {{ cloudflared_resolved_version }} {{ cloudflared_binary }}.
+    quiet: true
 
 - name: create cloudflared directories
   ansible.builtin.file:
-    owner: cloudflared
-    group: cloudflared
+    owner: root
+    group: root
     path: "{{ item }}"
     state: directory
-    mode: "0750"
+    mode: "0755"
   with_items:
     - /opt/cloudflared
     - /opt/cloudflared/bin
-    - /opt/cloudflared/config
+
+- name: check whether the cloudflared binary exists
+  ansible.builtin.stat:
+    path: /opt/cloudflared/bin/cloudflared
+  register: cloudflared_installed_binary
 
 - name: check whether the cloudflared version file exists
   ansible.builtin.stat:
@@ -37,33 +65,42 @@
 
 - name: install cloudflared
   when: >-
-    not cloudflared_version_file.stat.exists
-    or (cloudflared_current_version.content | default("") | b64decode) != cloudflared_version
+    not cloudflared_installed_binary.stat.exists
+    or not cloudflared_version_file.stat.exists
+    or (cloudflared_current_version.content | default("") | b64decode) != cloudflared_resolved_version
   block:
     - name: use the embedded cloudflared checksum
       ansible.builtin.set_fact:
         cloudflared_resolved_checksum: "{{ cloudflared_embedded_checksum }}"
       when: cloudflared_embedded_checksum | length > 0
 
-    - name: retrieve cloudflared release metadata
-      ansible.builtin.uri:
-        url: "{{ cloudflared_release_api_url }}"
-        headers:
-          Accept: application/vnd.github+json
-          X-GitHub-Api-Version: "2022-11-28"
-        return_content: true
-        timeout: 30
+    - name: resolve the pinned cloudflared release checksum
+      ansible.builtin.include_tasks: release.yaml
+      when:
+        - cloudflared_version != 'latest'
+        - cloudflared_embedded_checksum | length == 0
+
+    - name: validate cloudflared release assets
+      ansible.builtin.assert:
+        that:
+          - cloudflared_release.json.get('assets') is sequence
+          - cloudflared_release.json.get('assets') is not string
+          - cloudflared_release.json.get('assets') is not mapping
+          - >-
+            cloudflared_release.json.assets | select('mapping') | list | length
+            == cloudflared_release.json.assets | length
+          - cloudflared_release.json.get('body') is none or cloudflared_release.json.get('body') is string
+        fail_msg: >-
+          Invalid cloudflared {{ cloudflared_resolved_version }} release assets for {{ cloudflared_binary }}.
+        quiet: true
       when: cloudflared_embedded_checksum | length == 0
-      register: cloudflared_release
-      retries: 3
-      delay: 5
-      until: cloudflared_release is succeeded
 
     - name: select cloudflared release metadata
       ansible.builtin.set_fact:
         cloudflared_release_assets: >-
           {{
             cloudflared_release.json.assets
+            | selectattr('name', 'defined')
             | selectattr('name', 'equalto', cloudflared_binary)
             | list
           }}
@@ -73,7 +110,7 @@
             | default('', true)
             | regex_findall(
                 '(?m)^'
-                ~ cloudflared_binary
+                ~ (cloudflared_binary | ansible.builtin.regex_escape)
                 ~ ':[ ]*([0-9a-fA-F]{64})[ ]*$'
               )
           }}
@@ -85,9 +122,9 @@
           - cloudflared_release_assets | length == 1
           - >-
             cloudflared_release_digest is match('^sha256:[0-9a-fA-F]{64}$')
-            or cloudflared_release_body_checksums | length == 1
+            or (cloudflared_release_digest == '' and cloudflared_release_body_checksums | length == 1)
         fail_msg: >-
-          The cloudflared {{ cloudflared_version }} release does not provide one
+          The cloudflared {{ cloudflared_resolved_version }} release does not provide one
           SHA-256 checksum for {{ cloudflared_binary }}.
         quiet: true
       when: cloudflared_embedded_checksum | length == 0
@@ -120,48 +157,39 @@
         that:
           - cloudflared_resolved_checksum is match('^[0-9a-fA-F]{64}$')
         fail_msg: >-
-          The resolved cloudflared {{ cloudflared_version }} checksum is invalid.
+          The resolved cloudflared {{ cloudflared_resolved_version }} checksum for {{ cloudflared_binary }} is invalid.
         quiet: true
 
     - name: download cloudflared
-      ansible.builtin.get_url:
-        url: "{{ cloudflared_url }}"
-        dest: /opt/cloudflared/bin/cloudflared
-        checksum: sha256:{{ cloudflared_resolved_checksum }}
-        mode: "0750"
-        owner: cloudflared
-        group: cloudflared
-        setype: bin_t
-        seuser: system_u
+      ansible.builtin.include_role:
+        name: escapace.utilities.github_download
+        allow_duplicates: true
+        public: false
+      vars:
+        github_download_result_var: cloudflared_download
+        github_download_url: "{{ cloudflared_url }}"
+        github_download_dest: /opt/cloudflared/bin/cloudflared
+        github_download_checksum: sha256:{{ cloudflared_resolved_checksum }}
+        github_download_mode: "0755"
+        github_download_owner: root
+        github_download_group: root
 
     - name: write version
       ansible.builtin.copy:
-        content: "{{ cloudflared_version }}"
+        content: "{{ cloudflared_resolved_version }}"
         dest: /opt/cloudflared/version
         owner: root
         group: root
         mode: "0644"
 
-- name: create cloudflared service
-  ansible.builtin.template:
-    src: cloudflared.service.j2
-    dest: /usr/lib/systemd/system/cloudflared.service
+# Maintain attributes even when the requested version is already installed.
+- name: set cloudflared binary attributes
+  ansible.builtin.file:
+    path: /opt/cloudflared/bin/cloudflared
+    state: file
     owner: root
     group: root
-    mode: "0644"
-  notify:
-    - cloudflared daemon-reload
-    - cloudflared restart service
-
-- name: include cloudflared ec2 provider tasks
-  ansible.builtin.include_tasks: provider-ec2.yaml
-  when: provider is defined and provider == "ec2"
-  tags:
-    - run-cloudflared
-# - name: create directory for systemd drop-ins
-#   ansible.builtin.file:
-#     path: /etc/systemd/system/cloudflared.service.d
-#     owner: root
-#     group: root
-#     state: directory
-#     mode: 0755
+    mode: "0755"
+    setype: bin_t
+    seuser: system_u
+  when: not ansible_check_mode or cloudflared_installed_binary.stat.exists

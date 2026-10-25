@@ -10,11 +10,14 @@ cloudflared_architecture_map:
 cloudflared_architecture: "{{ cloudflared_architecture_map[ansible_facts['architecture']] }}"
 
 cloudflared_binary: cloudflared-linux-{{ cloudflared_architecture }}
-cloudflared_url: https://github.com/cloudflare/cloudflared/releases/download/{{ cloudflared_version }}/{{ cloudflared_binary }}
-cloudflared_release_api_url: https://api.github.com/repos/cloudflare/cloudflared/releases/tags/{{ cloudflared_version }}
+cloudflared_url: https://github.com/cloudflare/cloudflared/releases/download/{{ cloudflared_resolved_version }}/{{ cloudflared_binary }}
+cloudflared_release_api_url: >-
+  https://api.github.com/repos/cloudflare/cloudflared/releases/{{
+    'latest' if cloudflared_version == 'latest' else 'tags/' ~ cloudflared_version
+  }}
 cloudflared_embedded_checksum: >-
   {{
     cloudflared_checksum
     if cloudflared_checksum | length > 0
-    else cloudflared_checksums.get(cloudflared_version, {}).get(cloudflared_architecture, '')
+    else cloudflared_checksums.get(cloudflared_resolved_version, {}).get(cloudflared_architecture, '')
   }}

@@ -1,5 +1,5 @@
 ---
-cloudflared_version: 2026.9.1
+cloudflared_version: latest
 
 # Set this to a SHA-256 value to override embedded and release metadata.
 cloudflared_checksum: ""

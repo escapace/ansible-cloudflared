@@ -1,0 +1,99 @@
+---
+- name: remove the binary to test recovery with an unchanged version marker
+  ansible.builtin.file:
+    path: /opt/cloudflared/bin/cloudflared
+    state: absent
+  when: cloudflared_test_case.get('remove_binary', false)
+
+- name: clear transfer results from earlier role invocations
+  ansible.builtin.set_fact:
+    cloudflared_release: {}
+    cloudflared_download: {}
+
+- name: install the test version
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+  vars:
+    cloudflared_version: "{{ cloudflared_test_case.version }}"
+    cloudflared_checksums: >-
+      {{
+        cloudflared_test_defaults.cloudflared_checksums
+        if cloudflared_test_case.get('embedded', false)
+        else {}
+      }}
+    cloudflared_checksum: >-
+      {{
+        cloudflared_test_defaults.cloudflared_checksums['2026.9.1'][cloudflared_architecture]
+        if cloudflared_test_case.get('override', false)
+        else ''
+      }}
+
+- name: inspect the installed binary
+  ansible.builtin.command:
+    argv:
+      - /opt/cloudflared/bin/cloudflared
+      - --version
+  changed_when: false
+  register: cloudflared_test_binary_version
+
+- name: inspect the installed version marker
+  ansible.builtin.slurp:
+    src: /opt/cloudflared/version
+  register: cloudflared_test_version_marker
+
+- name: verify the installed version and checksum source
+  ansible.builtin.assert:
+    that:
+      - "'cloudflared version ' ~ cloudflared_test_case.version ~ ' ' in cloudflared_test_binary_version.stdout"
+      - cloudflared_test_version_marker.content | b64decode == cloudflared_test_case.version
+      - (cloudflared_release | length > 0) == cloudflared_test_case.metadata
+      - cloudflared_download.dest == '/opt/cloudflared/bin/cloudflared'
+      - >-
+        not cloudflared_test_case.get('legacy', false)
+        or not (cloudflared_release_assets | first).get('digest')
+
+- name: record installed file state before reapplying the pin
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - /opt/cloudflared/bin/cloudflared
+    - /opt/cloudflared/version
+  register: cloudflared_test_before
+
+- name: clear transfer results before testing an unchanged pin
+  ansible.builtin.set_fact:
+    cloudflared_release: {}
+    cloudflared_download: {}
+
+- name: reapply the installed pin without any available checksum
+  ansible.builtin.include_role:
+    name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+  vars:
+    cloudflared_version: "{{ cloudflared_test_case.version }}"
+    cloudflared_checksums: {}
+    cloudflared_checksum: ""
+
+- name: record installed file state after reapplying the pin
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - /opt/cloudflared/bin/cloudflared
+    - /opt/cloudflared/version
+  register: cloudflared_test_after
+
+- name: verify unchanged pins need no release lookup or file changes
+  ansible.builtin.assert:
+    that:
+      - cloudflared_release == {}
+      - cloudflared_download == {}
+      - cloudflared_test_after.results[0].stat.mode == '0755'
+      - cloudflared_test_after.results[0].stat.pw_name == 'root'
+      - cloudflared_test_after.results[0].stat.gr_name == 'root'
+      - >-
+        cloudflared_test_before.results | map(attribute='stat.checksum') | list
+        == cloudflared_test_after.results | map(attribute='stat.checksum') | list
+      - >-
+        cloudflared_test_before.results | map(attribute='stat.mtime') | list
+        == cloudflared_test_after.results | map(attribute='stat.mtime') | list
