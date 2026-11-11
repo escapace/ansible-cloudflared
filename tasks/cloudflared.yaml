@@ -60,9 +60,9 @@
 - name: read the cloudflared version file
   ansible.builtin.slurp:
     src: /opt/cloudflared/version
-  when: cloudflared_version_file.stat.exists
   register: cloudflared_current_version
 
+  when: cloudflared_version_file.stat.exists
 - name: install cloudflared
   when: >-
     not cloudflared_installed_binary.stat.exists
@@ -127,7 +127,6 @@
           The cloudflared {{ cloudflared_resolved_version }} release does not provide one
           SHA-256 checksum for {{ cloudflared_binary }}.
         quiet: true
-      when: cloudflared_embedded_checksum | length == 0
       vars:
         cloudflared_release_digest: >-
           {{
@@ -135,6 +134,7 @@
             | default('', true)
           }}
 
+      when: cloudflared_embedded_checksum | length == 0
     - name: resolve the cloudflared checksum
       ansible.builtin.set_fact:
         cloudflared_resolved_checksum: >-
@@ -144,7 +144,6 @@
             if cloudflared_release_digest | length > 0
             else cloudflared_release_body_checksums | first
           }}
-      when: cloudflared_embedded_checksum | length == 0
       vars:
         cloudflared_release_digest: >-
           {{
@@ -152,6 +151,7 @@
             | default('', true)
           }}
 
+      when: cloudflared_embedded_checksum | length == 0
     - name: validate the cloudflared checksum
       ansible.builtin.assert:
         that:

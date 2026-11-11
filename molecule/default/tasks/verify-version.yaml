@@ -33,9 +33,9 @@
     argv:
       - /opt/cloudflared/bin/cloudflared
       - --version
-  changed_when: false
   register: cloudflared_test_binary_version
 
+  changed_when: false
 - name: inspect the installed version marker
   ansible.builtin.slurp:
     src: /opt/cloudflared/version
@@ -56,11 +56,11 @@
   ansible.builtin.stat:
     path: "{{ item }}"
     checksum_algorithm: sha256
+  register: cloudflared_test_before
+
   loop:
     - /opt/cloudflared/bin/cloudflared
     - /opt/cloudflared/version
-  register: cloudflared_test_before
-
 - name: clear transfer results before testing an unchanged pin
   ansible.builtin.set_fact:
     cloudflared_release: {}
@@ -78,11 +78,11 @@
   ansible.builtin.stat:
     path: "{{ item }}"
     checksum_algorithm: sha256
+  register: cloudflared_test_after
+
   loop:
     - /opt/cloudflared/bin/cloudflared
     - /opt/cloudflared/version
-  register: cloudflared_test_after
-
 - name: verify unchanged pins need no release lookup or file changes
   ansible.builtin.assert:
     that:

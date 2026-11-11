@@ -4,13 +4,13 @@ argument_specs:
     short_description: install the cloudflared binary on RedHat-family hosts
     options:
       cloudflared_version:
+        description: Latest stable release on each run, or an exact YYYY.M.P release tag.
         type: str
         default: latest
-        description: Latest stable release on each run, or an exact YYYY.M.P release tag.
       cloudflared_checksum:
+        description: Optional SHA-256 override for the resolved version and architecture.
         type: str
         default: ""
-        description: Optional SHA-256 override for the resolved version and architecture.
       cloudflared_checksums:
-        type: dict
         description: Embedded SHA-256 checksums keyed by exact release tag, then amd64 or arm64.
+        type: dict
